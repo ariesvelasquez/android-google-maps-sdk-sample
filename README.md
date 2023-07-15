@@ -1,9 +1,12 @@
 Sample Google Maps App using Google Maps Sdk
 
-Description:
+**Description:**
 An App that asks for location permission and displays google maps. Zoom-in to current or default location.
 
-Google Instruction:
+**Screenshot:**
+[![Capture.png](https://i.postimg.cc/RZpvdH1z/Capture.png)](https://postimg.cc/9DT3FzNx)
+
+**Google Instruction**:
 Before you run your application, you need a Google Maps API key.
 
 To get one, follow the directions here:
