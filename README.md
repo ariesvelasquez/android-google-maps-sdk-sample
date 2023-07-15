@@ -11,7 +11,7 @@ An App that asks for location permission and displays google maps. Zoom-in to cu
 
 
 
-**Google Instruction**:
+**Google Instructions:**
 
 Before you run your application, you need a Google Maps API key.
 
