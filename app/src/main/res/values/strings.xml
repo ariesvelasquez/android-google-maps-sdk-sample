@@ -1,4 +1,7 @@
 <resources>
     <string name="app_name">Android Maps</string>
     <string name="title_activity_maps">MapsActivity</string>
+    <string name="location_permission_title">Location Permission Required</string>
+    <string name="location_permission_desc">This feature needs Location Permission, please accept the permission to proceed.</string>
+    <string name="okay">Okay</string>
 </resources>

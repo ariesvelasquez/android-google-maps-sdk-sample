@@ -48,7 +48,6 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
             ActivityResultContracts.RequestMultiplePermissions()
         ) { permissions ->
             if (permissions.all { entry -> entry.value }) {
-                initLocationServices()
                 initMapFragment()
             } else {
                 requestForLocationPermission()
@@ -121,9 +120,9 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
     private fun requestForLocationPermission(): Boolean {
         AlertDialog.Builder(
             this
-        ).setTitle("Location Permission Required")
-            .setMessage("This feature needs Location Permission, please accept the permission to proceed.")
-            .setPositiveButton("Okay") { _, _ ->
+        ).setTitle(getString(R.string.location_permission_title))
+            .setMessage(getString(R.string.location_permission_desc))
+            .setPositiveButton(getString(R.string.okay)) { _, _ ->
                 val permissions = arrayOf(
                     Manifest.permission.ACCESS_FINE_LOCATION,
                     Manifest.permission.ACCESS_COARSE_LOCATION
