@@ -1,4 +1,4 @@
-Sample Google Maps App using Google Maps Sdk
+Sample Maps App using Google Maps
 
 **Description:**
 
