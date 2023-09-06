@@ -4,4 +4,5 @@
     <string name="location_permission_title">Location Permission Required</string>
     <string name="location_permission_desc">This feature needs Location Permission, please accept the permission to proceed.</string>
     <string name="okay">Okay</string>
+    <string name="location_unavailable_message">Could not load your current location, please enable your device location settings</string>
 </resources>

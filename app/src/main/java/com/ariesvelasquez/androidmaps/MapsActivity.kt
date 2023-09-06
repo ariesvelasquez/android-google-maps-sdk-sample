@@ -2,35 +2,42 @@ package com.ariesvelasquez.androidmaps
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.app.Activity
+import android.content.Context
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.location.Location
 import android.location.LocationManager
 import android.os.Bundle
+import android.provider.Settings
 import android.util.Log
+import android.widget.Toast
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
+import androidx.core.location.LocationManagerCompat
 import com.ariesvelasquez.androidmaps.databinding.ActivityMapsBinding
-import com.google.android.gms.location.FusedLocationProviderClient
-import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.LocationAvailability
+import com.google.android.gms.location.LocationCallback
+import com.google.android.gms.location.LocationResult
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.GoogleMap
-import com.google.android.gms.maps.LocationSource.OnLocationChangedListener
 import com.google.android.gms.maps.OnMapReadyCallback
 import com.google.android.gms.maps.SupportMapFragment
 import com.google.android.gms.maps.model.LatLng
 
 
-class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
+class MapsActivity : AppCompatActivity(),
+    OnMapReadyCallback {
 
-    private lateinit var mMap: GoogleMap
+    private var mMap: GoogleMap? = null
     private lateinit var binding: ActivityMapsBinding
     private lateinit var requestPermissionLauncher: ActivityResultLauncher<Array<String>>
 
-    private lateinit var fusedLocationProviderClient: FusedLocationProviderClient
-    private var lastKnownLocation: Location? = null
+    private var locationUtil: LocationUtil? = null
+    private var lastLocation: Location? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -38,9 +45,8 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
         binding = ActivityMapsBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        initLocationServices()
         listenForPermissionRequests()
-        initMapFragment()
+        initMap()
     }
 
     private fun listenForPermissionRequests() {
@@ -48,18 +54,29 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
             ActivityResultContracts.RequestMultiplePermissions()
         ) { permissions ->
             if (permissions.all { entry -> entry.value }) {
-                initMapFragment()
+                initMap()
             } else {
                 requestForLocationPermission()
             }
         }
     }
 
-    private fun initLocationServices() {
-        fusedLocationProviderClient = LocationServices.getFusedLocationProviderClient(this)
+    override fun onResume() {
+        super.onResume()
+        checkLocationSettings()
     }
 
-    private fun initMapFragment() {
+    private fun checkLocationSettings() {
+        if (isLocationSettingsEnabled()) {
+            locationUtil?.restartLocationTracking()
+        } else {
+            locationUtil?.stopLocationTracking()
+            showLocationNotAvailableMessage()
+            zoomToDefaultOrLastLocation()
+        }
+    }
+
+    private fun initMap() {
         if (hasLocationPermission()) {
             val mapFragment =
                 supportFragmentManager.findFragmentById(R.id.map) as SupportMapFragment
@@ -69,42 +86,51 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
         }
     }
 
-    @SuppressLint("MissingPermission")
     override fun onMapReady(googleMap: GoogleMap) {
         mMap = googleMap
-        mMap.isTrafficEnabled = true
+        mMap?.isTrafficEnabled = true
 
-        if (hasLocationPermission()) {
-            mMap.isMyLocationEnabled = true
-            getCurrentLocation()
-        } else {
-            zoomToDefaultLocation()
-        }
+        getCurrentLocation()
     }
 
+    @SuppressLint("MissingPermission")
     private fun getCurrentLocation() {
-        try {
-            val locationResult = fusedLocationProviderClient.lastLocation
-            locationResult.addOnCompleteListener(this) { task ->
-                when {
-                    task.isSuccessful -> {
-                        lastKnownLocation = task.result
-                        lastKnownLocation?.let {
-                            mMap.zoomCenter(it)
-                        }
-                    }
-                    else -> zoomToDefaultLocation()
+        if (!hasLocationPermission()) {
+            requestForLocationPermission()
+            zoomToDefaultOrLastLocation()
+            return
+        }
+
+        mMap?.isMyLocationEnabled = true
+
+        val locationCallback = object : LocationCallback() {
+            override fun onLocationAvailability(availability: LocationAvailability) {
+                Log.e(
+                    "onLocationAvailability",
+                    "onLocationAvailability ${availability.isLocationAvailable}"
+                )
+                if (!availability.isLocationAvailable) {
+                    showLocationNotAvailableMessage()
                 }
             }
-        } catch (e: SecurityException) {
-            Log.e("SecurityException", "Exception: ${e.message}")
-            zoomToDefaultLocation()
+
+            override fun onLocationResult(result: LocationResult) {
+                // Handle when location is available
+                result.lastLocation?.let {
+                    lastLocation = it
+                    mMap?.zoomCenter(it, 5f)
+                }
+            }
+        }
+        locationUtil = LocationUtil(this, locationCallback).apply {
+            startLocationTracking()
         }
     }
 
-    private fun zoomToDefaultLocation() {
-        mMap.apply {
-            zoomCenter(quezonCityLocation)
+    private fun zoomToDefaultOrLastLocation() {
+        mMap?.apply {
+            val location = lastLocation ?: quezonCityLocation
+            zoomCenter(location)
             uiSettings.isMyLocationButtonEnabled = false
         }
     }
@@ -117,19 +143,42 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
         ) == PackageManager.PERMISSION_GRANTED
     }
 
-    private fun requestForLocationPermission(): Boolean {
+    private fun requestForLocationPermission() {
+        showDialog(
+            getString(R.string.location_permission_desc)
+        ) {
+            val permissions = arrayOf(
+                Manifest.permission.ACCESS_FINE_LOCATION,
+                Manifest.permission.ACCESS_COARSE_LOCATION
+            )
+            requestPermissionLauncher.launch(permissions)
+        }
+    }
+
+    override fun onStop() {
+        super.onStop()
+        locationUtil?.stopLocationTracking()
+    }
+
+    private fun showDialog(
+        message: String,
+        positiveCallback: () -> Unit
+    ) {
         AlertDialog.Builder(
             this
         ).setTitle(getString(R.string.location_permission_title))
-            .setMessage(getString(R.string.location_permission_desc))
+            .setMessage(message)
             .setPositiveButton(getString(R.string.okay)) { _, _ ->
-                val permissions = arrayOf(
-                    Manifest.permission.ACCESS_FINE_LOCATION,
-                    Manifest.permission.ACCESS_COARSE_LOCATION
-                )
-                requestPermissionLauncher.launch(permissions)
+                positiveCallback.invoke()
             }.show()
-        return false
+    }
+
+    private fun showLocationNotAvailableMessage() {
+        Toast.makeText(
+            this@MapsActivity,
+            getString(R.string.location_unavailable_message),
+            Toast.LENGTH_LONG
+        ).show()
     }
 
     companion object {
@@ -141,7 +190,7 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
 }
 
 fun GoogleMap.zoomCenter(location: Location, zoom: Float = 14.0.toFloat()) {
-    this.moveCamera(
+    this.animateCamera(
         CameraUpdateFactory.newLatLngZoom(
             LatLng(
                 location.latitude,
@@ -149,4 +198,9 @@ fun GoogleMap.zoomCenter(location: Location, zoom: Float = 14.0.toFloat()) {
             ), 14.0.toFloat()
         )
     )
+}
+
+fun Activity.isLocationSettingsEnabled(): Boolean {
+    val locationManager = this.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+    return LocationManagerCompat.isLocationEnabled(locationManager)
 }
